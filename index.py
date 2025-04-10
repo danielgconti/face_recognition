@@ -103,7 +103,7 @@ tuple(np.multiply(augmented['bboxes'][0][:2], [950,650]).astype(int)),
 tuple(np.multiply(augmented['bboxes'][0][2:], [950,650]).astype(int)),
 (255,0,0), 2)
 
-plt.imshow(augmented['image'])
+# plt.imshow(augmented['image'])
 # plt.show()
 
 # for partition in ['train', 'test', 'val']:
@@ -187,12 +187,12 @@ test_labels = test_labels.map(tf_load_labels)
 val_labels = tf.data.Dataset.list_files('aug_data/val/labels/*.json', shuffle=False)
 val_labels = val_labels.map(tf_load_labels)
 
-print("train_images length: ", len(train_images))
-print("train_labels length: ", len(train_labels))
-print("test_images length: ", len(test_images))
-print("test_labels length: ", len(test_labels))
-print("val_images length: ", len(val_images))
-print("val_labels length: ", len(val_labels))
+# print("train_images length: ", len(train_images))
+# print("train_labels length: ", len(train_labels))
+# print("test_images length: ", len(test_images))
+# print("test_labels length: ", len(test_labels))
+# print("val_images length: ", len(val_images))
+# print("val_labels length: ", len(val_labels))
 
 train = tf.data.Dataset.zip((train_images, train_labels))
 train = train.shuffle(5000)
@@ -211,10 +211,10 @@ val = val.prefetch(4)
 
 data_samples = train.as_numpy_iterator()
 res = data_samples.next()
-print(res[0].shape)
+# print(res[0].shape)
 
 fig, ax = plt.subplots(ncols=4, figsize=(20, 20))
-print("for looping")
+# print("for looping")
 for idx in range(4):
     sample_image = res[0][idx].copy()
     sample_coords = res[1][1][idx]
@@ -225,5 +225,40 @@ for idx in range(4):
 
     ax[idx].imshow(sample_image)
 
-plt.show()
+# plt.show()
 
+# End of data preprocessing
+
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Dense, GlobalMaxPooling2D
+from tensorflow.keras.applications import VGG16
+
+# vgg = VGG16(include_top=False)
+# vgg.summary()
+
+def build_model():
+    input_layer = Input(shape=(120,120,3))
+
+    vgg = VGG16(include_top=False)(input_layer)
+
+    f1 = GlobalMaxPooling2D()(vgg)
+    class1 = Dense(2048, activation='relu')(f1)
+    class2 = Dense(1, activation='sigmoid')(class1)
+
+    f2 = GlobalMaxPooling2D()(vgg)
+    regress1 = Dense(2048, activation='relu')(f2)
+    regress2 = Dense(4, activation='sigmoid')(regress1)
+
+    facetracker = Model(inputs=input_layer, outputs=[class2, regress2])
+    return facetracker
+
+facetracker = build_model()
+facetracker.summary()
+
+x, y = train.as_numpy_iterator().next()
+# print(x.shape)
+
+classes, coords = facetracker.predict(x)
+print(classes, coords)
+
+# Finish building neural network
