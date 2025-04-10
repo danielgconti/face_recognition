@@ -104,7 +104,7 @@ tuple(np.multiply(augmented['bboxes'][0][2:], [950,650]).astype(int)),
 (255,0,0), 2)
 
 plt.imshow(augmented['image'])
-plt.show()
+# plt.show()
 
 # for partition in ['train', 'test', 'val']:
 #     for image in os.listdir(os.path.join('data', partition, 'images')):
@@ -136,7 +136,6 @@ plt.show()
 #                         annotation['class'] = 0
 #                     else:
 #                         bbox = augmented['bboxes'][0]
-#                         bbox = [bbox[0] / 950, bbox[1] / 650, bbox[2] / 950, bbox[3] / 650]
 #                         annotation['bbox'] = bbox
 #                         annotation['class'] = 1
 #                 else:
@@ -149,7 +148,7 @@ plt.show()
 #         except Exception as e:
 #             print(e)
 
-# 
+
 train_images = tf.data.Dataset.list_files('aug_data/train/images/*.jpg', shuffle=False)
 train_images = train_images.map(load_image)
 train_images = train_images.map(lambda x: tf.image.resize(x, (120,120)))
@@ -178,6 +177,7 @@ def tf_load_labels(x):
     bbox.set_shape([4])        # Assuming bbox is [x, y, width, height]
     return clas, bbox
 
+# Labels
 train_labels = tf.data.Dataset.list_files('aug_data/train/labels/*.json', shuffle=False)
 train_labels = train_labels.map(tf_load_labels)
 
@@ -187,9 +187,12 @@ test_labels = test_labels.map(tf_load_labels)
 val_labels = tf.data.Dataset.list_files('aug_data/val/labels/*.json', shuffle=False)
 val_labels = val_labels.map(tf_load_labels)
 
-print('train_labels', train_labels.as_numpy_iterator().next())
-
-# print(len(train_images))
+print("train_images length: ", len(train_images))
+print("train_labels length: ", len(train_labels))
+print("test_images length: ", len(test_images))
+print("test_labels length: ", len(test_labels))
+print("val_images length: ", len(val_images))
+print("val_labels length: ", len(val_labels))
 
 train = tf.data.Dataset.zip((train_images, train_labels))
 train = train.shuffle(5000)
@@ -197,17 +200,18 @@ train = train.batch(8)
 train = train.prefetch(4)
 
 test = tf.data.Dataset.zip((test_images, test_labels))
-test = test.shuffle(5000)
+test = test.shuffle(1300)
 test = test.batch(8)
 test = test.prefetch(4)
 
 val = tf.data.Dataset.zip((val_images, val_labels))
-val = val.shuffle(5000)
+val = val.shuffle(1000)
 val = val.batch(8)
 val = val.prefetch(4)
 
 data_samples = train.as_numpy_iterator()
 res = data_samples.next()
+print(res[0].shape)
 
 fig, ax = plt.subplots(ncols=4, figsize=(20, 20))
 print("for looping")
@@ -217,10 +221,9 @@ for idx in range(4):
     cv2.rectangle(sample_image,
             tuple(np.multiply(sample_coords[:2], [120,120]).astype(int)),
             tuple(np.multiply(sample_coords[2:], [120,120]).astype(int)),
-                    (255,0,0), 2)
-
-                    
+                    (255,0,0), 1)
 
     ax[idx].imshow(sample_image)
 
 plt.show()
+
