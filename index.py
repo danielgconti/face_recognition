@@ -259,6 +259,140 @@ x, y = train.as_numpy_iterator().next()
 # print(x.shape)
 
 classes, coords = facetracker.predict(x)
-print(classes, coords)
+# print(classes, coords)
 
 # Finish building neural network
+# print(len(train))
+
+batches_per_epoch = len(train)
+lr_decay = (1./0.75 - 1)/batches_per_epoch
+
+opt = tf.keras.optimizers.Adam(learning_rate=0.0001, decay=lr_decay)
+# print(lr_decay)
+
+def localization_loss(y_true, yhat):
+    delta_coord = tf.reduce_sum(tf.square(y_true[:,:2] - yhat[:,:2]))
+
+    h_true = y_true[:,3] - y_true[:,1]
+    w_true = y_true[:,2] - y_true[:,0]
+
+    h_pred = yhat[:,3] - yhat[:,1]
+    w_pred = yhat[:,2] - yhat[:,0]
+
+    delta_size = tf.reduce_sum(tf.square(w_true - w_pred) + tf.square(h_true - h_pred))
+
+    return delta_coord + delta_size
+
+classloss = tf.keras.losses.BinaryCrossentropy()
+regressloss = localization_loss
+
+print("\n")
+print(localization_loss(y[1], coords).numpy())
+
+print(classloss(y[0], classes).numpy())
+
+# Step 9 done
+
+class FaceTracker(Model):
+    def __init__(self, facetracker, **kwargs):
+        super().__init__(**kwargs)
+        self.model = facetracker
+
+    def compile(self, opt, classloss, localizationloss, **kwargs):
+        super().compile(**kwargs)
+        self.closs = classloss
+        self.lloss = localizationloss
+        self.opt = opt
+
+    def train_step(self, batch, **kwargs):
+        X, y = batch 
+
+        with tf.GradientTape() as tape:
+            classes, coords = self.model(X, training=True)
+
+            batch_classloss = self.closs(y[0], classes)
+            batch_localizationloss = self.lloss(tf.cast(y[1], tf.float32), coords)
+
+            total_loss = batch_localizationloss+0.5*batch_classloss
+
+            grad = tape.gradient(total_loss, self.model.trainable_variables)
+
+        opt.apply_gradients(zip(grad, self.model.trainable_variables))
+
+        return {"total_loss":total_loss, "class_loss":batch_classloss, "regress_loss":batch_localizationloss}
+
+    def test_step(self, batch, **kwargs):
+        X, y = batch 
+
+        classes, coords = self.model(X, training=False)
+
+        batch_classloss = self.closs(y[0], classes)
+        batch_localizationloss = self.lloss(tf.cast(y[1], tf.float32), coords)
+        total_loss = batch_localizationloss+0.5*batch_classloss
+
+        return {"total_loss":total_loss, "class_loss":batch_classloss, "regress_loss":batch_localizationloss}
+
+    def call(self, X, **kwargs):
+        return self.model(X, **kwargs)
+
+model = FaceTracker(facetracker)
+model.compile(opt, classloss, regressloss)
+from tensorflow.keras.models import load_model
+
+logdir='logs'
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
+# hist = model.fit(train, epochs=3, validation_data=val, callbacks=[tensorboard_callback])
+# facetracker.save('facetracker.h5')
+facetracker = load_model('facetracker.h5')
+
+test_data = test.as_numpy_iterator()
+test_sample = test_data.next()
+yhat = facetracker.predict(test_sample[0])
+
+fig, ax = plt.subplots(ncols=4, figsize=(20,20))
+for idx in range(4):
+    sample_image = test_sample[0][idx].copy()
+    sample_coords = yhat[1][idx]
+
+    if yhat[0][idx] > 0.9:
+        cv2.rectangle(sample_image,
+        tuple(np.multiply(sample_coords[:2], [120,120]).astype(int)),
+        tuple(np.multiply(sample_coords[2:], [120,120]).astype(int)),
+        (255,0,0), 2)
+
+    ax[idx].imshow(sample_image)
+# plt.show()
+
+cap = cv2.VideoCapture(0)
+while cap.isOpened():
+    _, frame = cap.read()
+    # frame = frame[50:500, 50:500,:]
+
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    resized = tf.image.resize(rgb, (400, 400))
+
+    yhat = facetracker.predict(np.expand_dims(resized/255,0))
+    sample_coords = yhat[1][0]
+
+    if yhat[0] > 0.5:
+        cv2.rectangle(frame,
+                    tuple(np.multiply(sample_coords[:2], [1280,720]).astype(int)),
+                    tuple(np.multiply(sample_coords[2:], [1280,720]).astype(int)),
+                        (255,0,0),2)
+        cv2.rectangle(frame,
+                    tuple(np.add(np.multiply(sample_coords[:2], [1280,720]).astype(int),
+                            [0,-30])),
+                    tuple(np.add(np.multiply(sample_coords[:2], [1280,720]).astype(int),
+                            [80,0])),
+                        (255,0,0), -1)
+        cv2.putText(frame, 'face', tuple(np.add(np.multiply(sample_coords[:2], [1280,720]).astype(int),
+        [0,-1])),
+        cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2, cv2.LINE_AA)
+
+        cv2.imshow('FaceTrack', frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+cap.release()
+cv2.destroyAllWindows()
