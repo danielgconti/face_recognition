@@ -366,33 +366,31 @@ for idx in range(4):
 cap = cv2.VideoCapture(0)
 while cap.isOpened():
     _, frame = cap.read()
-    # frame = frame[50:500, 50:500,:]
+    
+    # Optional: Resize for standard consistency
+    frame = cv2.resize(frame, (640, 480))
 
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    resized = tf.image.resize(rgb, (400, 400))
+    resized = tf.image.resize(rgb, (120, 120))
 
-    yhat = facetracker.predict(np.expand_dims(resized/255,0))
+    yhat = facetracker.predict(np.expand_dims(resized/255, 0))
     sample_coords = yhat[1][0]
 
-    if yhat[0] > 0.5:
-        cv2.rectangle(frame,
-                    tuple(np.multiply(sample_coords[:2], [1280,720]).astype(int)),
-                    tuple(np.multiply(sample_coords[2:], [1280,720]).astype(int)),
-                        (255,0,0),2)
-        cv2.rectangle(frame,
-                    tuple(np.add(np.multiply(sample_coords[:2], [1280,720]).astype(int),
-                            [0,-30])),
-                    tuple(np.add(np.multiply(sample_coords[:2], [1280,720]).astype(int),
-                            [80,0])),
-                        (255,0,0), -1)
-        cv2.putText(frame, 'face', tuple(np.add(np.multiply(sample_coords[:2], [1280,720]).astype(int),
-        [0,-1])),
-        cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2, cv2.LINE_AA)
+    if yhat[0] > 0.9:
+        height, width, _ = frame.shape
+        top_left = tuple(np.multiply(sample_coords[:2], [width, height]).astype(int))
+        bottom_right = tuple(np.multiply(sample_coords[2:], [width, height]).astype(int))
 
-        cv2.imshow('FaceTrack', frame)
+        cv2.rectangle(frame, top_left, bottom_right, (255, 0, 0), 2)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        # Optional: Label
+        label_pos = (top_left[0], top_left[1] - 10)
+        cv2.putText(frame, 'face', label_pos, cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+
+    cv2.imshow('FaceTrack', frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
 cap.release()
 cv2.destroyAllWindows()
